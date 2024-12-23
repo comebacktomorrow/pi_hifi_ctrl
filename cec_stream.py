@@ -140,7 +140,8 @@ while p.poll() is None:
             print("Amp off")
     
      # Handle any playback device power status changes
-    elif "power status changed from" in l:
+    elif ": power status changed from" in l:
+        print("DEBUG: Detect power status change:", l) #Trying to nail this down for ATV
         if "from 'on' to 'standby'" in l:
             for _ in range(4):  # Send command 4 times
                 cbs = pi.wave_send_once(
