@@ -2,8 +2,8 @@
 
 # Monitor HDMI-CEC for volume keys, send RC5-encoded commands.
 # Confirmed working with:
-#   Cambridge Audio azur 540A v2
-#   Sony x8500d TV
+#   Cambridge Audio azur CX60A
+#   Sony EX600 TV
 
 #############
 # CONSTANTS #
@@ -22,25 +22,19 @@ CA_RC5_SYS = 16
 
 # dictionary of possible commands, mapped to the code we need to send
 cmd = {
-    "aux": 4,
-    "cd": 5,
-    "tuner": 3,
-    "dvd": 1,
-    "av": 2,
-    "tapemon": 0,
     "vol-": 17,
     "vol+": 16,
     "mute": 13,
     "standby": 12,
-    "bright": 18,
-    "source+": 19,
-    "source-": 20,
+    "bright": 72,
+    "source+": 99,
+    "source-": 126,
     "clipoff": 21,
     "clipon": 22,
     "muteon": 50,
     "muteoff": 51,
-    "ampon": 14,
-    "ampoff": 15,
+    "ampon": 110,
+    "ampoff": 111,
 }
 
 #############
@@ -117,22 +111,54 @@ p = subprocess.Popen(
 while p.poll() is None:
     l = p.stdout.readline()
     print(l)
+    # Handle TV power state changes
     if "TV (0): power status changed" in l:
-        power = l.split()[-1]
-        if power == "'on'":
-            cbs = pi.wave_send_once(
-                wave_mnch(build_rc5(CA_RC5_SYS, cmd["ampon"]), PIN, RC5_PER)
-            )
+        # Extract the final state by taking the last quoted string
+        parts = l.split("'")
+        final_state = parts[-2] if len(parts) >= 2 else ""
+        
+        # Turn amp on for 'on' state or transition to on
+        if final_state == "on" or final_state == "in transition from standby to on":
+            for _ in range(4):  # Send command 4 times
+                cbs = pi.wave_send_once(
+                    wave_mnch(build_rc5(CA_RC5_SYS, cmd["ampon"]), PIN, RC5_PER)
+                )
+                time.sleep(0.1)  # Small delay between sends
             print("Amp on")
             p.stdin.write(
-                "tx 50:72:01 \n"
-            )  # tell TV "Audio System Active" (i.e. turn off TV speakers)
-            p.stdin.flush()
-        elif power == "'standby'":
-            cbs = pi.wave_send_once(
-                wave_mnch(build_rc5(CA_RC5_SYS, cmd["ampoff"]), PIN, RC5_PER)
+                "tx 50:72:01 \n"  # tell TV "Audio System Active" (i.e. turn off TV speakers)
             )
+            p.stdin.flush()
+            
+        # Turn amp off for standby state
+        elif final_state == "standby":
+            for _ in range(4):  # Send command 4 times
+                cbs = pi.wave_send_once(
+                    wave_mnch(build_rc5(CA_RC5_SYS, cmd["ampoff"]), PIN, RC5_PER)
+                )
+                time.sleep(0.1)  # Small delay between sends
             print("Amp off")
+    
+     # Handle any playback device power status changes
+    elif "power status changed from" in l:
+        if "from 'on' to 'standby'" in l:
+            for _ in range(4):  # Send command 4 times
+                cbs = pi.wave_send_once(
+                    wave_mnch(build_rc5(CA_RC5_SYS, cmd["ampoff"]), PIN, RC5_PER)
+                )
+                time.sleep(0.1)  # Small delay between sends
+            print("Amp off")
+        elif "from 'standby' to 'on'" in l:
+            for _ in range(4):  # Send command 4 times
+                cbs = pi.wave_send_once(
+                    wave_mnch(build_rc5(CA_RC5_SYS, cmd["ampon"]), PIN, RC5_PER)
+                )
+                time.sleep(0.1)  # Small delay between sends
+            print("Amp on")
+            p.stdin.write(
+                "tx 50:72:01 \n"  # tell TV "Audio System Active" (i.e. turn off TV speakers)
+            )
+            p.stdin.flush()
     elif READY in l:
         p.stdin.write("tx 50:7a:08 \n")  # report vol level 08
         p.stdin.flush()  # (TV won't reduce volume if it thinks it's at zero)
