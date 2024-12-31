@@ -10,7 +10,7 @@
 #############
 VOL_UP = "key pressed: volume up (41)"
 VOL_DN = "key pressed: volume down (42)"
-MUTE = "key pressed: mute (43)"
+MUTE = "key released: mute (43)"
 READY = "audio status '7f'"  # message sent by cec-client to TV at end of handshaking
 
 VOL_STEPS = 4
@@ -19,6 +19,8 @@ PIN = 4  # CPU GPIO number (not physical IO header pin number)
 
 RC5_PER = 889  # half-bit period (microseconds)
 CA_RC5_SYS = 16
+
+MUTE_STATE = False  # False = unmuted, True = muted
 
 # dictionary of possible commands, mapped to the code we need to send
 cmd = {
@@ -178,9 +180,19 @@ while p.poll() is None:
             cbs = pi.wave_send_once(wid_dn)
             time.sleep(0.05)
     elif MUTE in l:
-        cbs = pi.wave_send_once(
-            wave_mnch(build_rc5(CA_RC5_SYS, cmd["mute"]), PIN, RC5_PER)
-        )
+        if MUTE_STATE:
+            # Currently muted, so unmute
+            cbs = pi.wave_send_once(
+                wave_mnch(build_rc5(CA_RC5_SYS, cmd["muteoff"]), PIN, RC5_PER)
+            )
+            print("Mute off")
+        else:
+            # Currently unmuted, so mute
+            cbs = pi.wave_send_once(
+                wave_mnch(build_rc5(CA_RC5_SYS, cmd["muteon"]), PIN, RC5_PER)
+            )
+            print("Mute on")
+        MUTE_STATE = not MUTE_STATE  # Toggle the state
 
 
 sys.exit(0)
