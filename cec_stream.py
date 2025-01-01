@@ -43,8 +43,8 @@ cmd = {
 # Functions #
 #############
 
-# build RC5 message, return as int
 def build_rc5(sys, cmd):
+    """Build RC5 message, return as int"""
     RC5_START = 0b100 + (0b010 * (cmd < 64))
     RC5_SYS = int(sys)
     RC5_CMD = int(cmd)
@@ -56,17 +56,14 @@ def build_rc5(sys, cmd):
 
     return RC5_MSG
 
-
-# manchester encode waveform. Period is the half-bit period in microseconds.
 def wave_mnch(DATA, PIN, PERIOD):
+    """Manchester encode waveform. Period is the half-bit period in microseconds."""
     pi.set_mode(PIN, pigpio.OUTPUT)  # set GPIO pin to output.
 
     # create msg
     # syntax: pigpio.pulse(gpio_on, gpio_off, delay us)
     msg = []
-    for i in bin(DATA)[
-        2:
-    ]:  # this is a terrible way to iterate over bits... but it works.
+    for i in bin(DATA)[2:]:  # iterate over bits
         if i == "1":
             msg.append(pigpio.pulse(0, 1 << PIN, PERIOD))  # L
             msg.append(pigpio.pulse(1 << PIN, 0, PERIOD))  # H
@@ -76,9 +73,32 @@ def wave_mnch(DATA, PIN, PERIOD):
 
     msg.append(pigpio.pulse(0, 1 << PIN, PERIOD))  # return line to idle condition.
     pi.wave_add_generic(msg)
-    wid = pi.wave_create()
-    return wid
+    try:
+        wid = pi.wave_create()
+        return wid
+    except pigpio.error:
+        pi.wave_clear()  # Clear all waves if we hit an error
+        wid = pi.wave_create()  # Try again
+        return wid
 
+def send_command(command_type, repeat=1):
+    """Send a command, managing wave resources properly"""
+    try:
+        wave_id = wave_mnch(build_rc5(CA_RC5_SYS, cmd[command_type]), PIN, RC5_PER)
+        print(f"{command_type}")  # Print the command being sent
+        for _ in range(repeat):
+            pi.wave_send_once(wave_id)
+            time.sleep(0.1)  # Small delay between sends
+        
+        # Wait for transmission to complete
+        while pi.wave_tx_busy():
+            time.sleep(0.01)
+            
+        # Clean up
+        pi.wave_delete(wave_id)
+    except pigpio.error as e:
+        print(f"Error sending command {command_type}: {e}")
+        pi.wave_clear()  # Reset wave resources
 
 ##############
 # Start here #
@@ -91,24 +111,16 @@ import time
 
 pi = pigpio.pi()
 
-
-# generate RC5 message (int)
-rc5_msg_up = build_rc5(CA_RC5_SYS, cmd["vol+"])
-rc5_msg_dn = build_rc5(CA_RC5_SYS, cmd["vol-"])
-# generate digital manchester-encoded waveform
-wid_up = wave_mnch(rc5_msg_up, PIN, RC5_PER)
-wid_dn = wave_mnch(rc5_msg_dn, PIN, RC5_PER)
-
+# Clear any existing waves at startup
+pi.wave_clear()
 
 # run cec-client and watch output
-# (because I can't get the damn python API to work!)
 p = subprocess.Popen(
     args=["/usr/bin/cec-client", "--type", "a", "RPI"],
     stdin=subprocess.PIPE,
     stdout=subprocess.PIPE,
     universal_newlines=True,
 )
-
 
 while p.poll() is None:
     l = p.stdout.readline()
@@ -121,78 +133,50 @@ while p.poll() is None:
         
         # Turn amp on for 'on' state or transition to on
         if final_state == "on" or final_state == "in transition from standby to on":
-            for _ in range(4):  # Send command 4 times
-                cbs = pi.wave_send_once(
-                    wave_mnch(build_rc5(CA_RC5_SYS, cmd["ampon"]), PIN, RC5_PER)
-                )
-                time.sleep(0.1)  # Small delay between sends
-            print("Amp on")
+            send_command("ampon", repeat=4)
+            MUTE_STATE = False  # Amp always turns on unmuted
             p.stdin.write(
-                "tx 50:72:01 \n"  # tell TV "Audio System Active" (i.e. turn off TV speakers)
+                "tx 50:72:01 \n"  # tell TV "Audio System Active"
             )
             p.stdin.flush()
             
         # Turn amp off for standby state
         elif final_state == "standby":
-            for _ in range(4):  # Send command 4 times
-                cbs = pi.wave_send_once(
-                    wave_mnch(build_rc5(CA_RC5_SYS, cmd["ampoff"]), PIN, RC5_PER)
-                )
-                time.sleep(0.1)  # Small delay between sends
-            print("Amp off")
+            send_command("ampoff", repeat=4)
     
-     # Handle any playback device power status changes
+    # Handle any playback device power status changes
     elif ": power status changed from" in l:
-        print("DEBUG: Detect power status change:", l) #Trying to nail this down for ATV
+        print("DEBUG: Detect power status change:", l)
         if "from 'on' to 'standby'" in l:
-            for _ in range(4):  # Send command 4 times
-                cbs = pi.wave_send_once(
-                    wave_mnch(build_rc5(CA_RC5_SYS, cmd["ampoff"]), PIN, RC5_PER)
-                )
-                time.sleep(0.1)  # Small delay between sends
-            print("Amp off")
+            send_command("ampoff", repeat=4)
         elif "from 'standby' to 'on'" in l:
-            for _ in range(4):  # Send command 4 times
-                cbs = pi.wave_send_once(
-                    wave_mnch(build_rc5(CA_RC5_SYS, cmd["ampon"]), PIN, RC5_PER)
-                )
-                time.sleep(0.1)  # Small delay between sends
-            print("Amp on")
+            send_command("ampon", repeat=4)
+            MUTE_STATE = False  # Amp always turns on unmuted
             p.stdin.write(
-                "tx 50:72:01 \n"  # tell TV "Audio System Active" (i.e. turn off TV speakers)
+                "tx 50:72:01 \n"  # tell TV "Audio System Active"
             )
             p.stdin.flush()
     elif READY in l:
         p.stdin.write("tx 50:7a:08 \n")  # report vol level 08
-        p.stdin.flush()  # (TV won't reduce volume if it thinks it's at zero)
+        p.stdin.flush()
     elif VOL_UP in l:
-        print("Volume up")
         p.stdin.write("tx 50:7a:10 \n")  # report vol level 16
         p.stdin.flush()
-        for i in range(VOL_STEPS):
-            cbs = pi.wave_send_once(wid_up)
-            time.sleep(0.05)
+        send_command("vol+", repeat=VOL_STEPS)
     elif VOL_DN in l:
-        print("Volume down")
         p.stdin.write("tx 50:7a:04 \n")  # report vol level 04
         p.stdin.flush()
-        for i in range(VOL_STEPS):
-            cbs = pi.wave_send_once(wid_dn)
-            time.sleep(0.05)
+        send_command("vol-", repeat=VOL_STEPS)
     elif MUTE in l:
         if MUTE_STATE:
             # Currently muted, so unmute
-            cbs = pi.wave_send_once(
-                wave_mnch(build_rc5(CA_RC5_SYS, cmd["muteoff"]), PIN, RC5_PER)
-            )
-            print("Mute off")
+            send_command("muteoff")
         else:
             # Currently unmuted, so mute
-            cbs = pi.wave_send_once(
-                wave_mnch(build_rc5(CA_RC5_SYS, cmd["muteon"]), PIN, RC5_PER)
-            )
-            print("Mute on")
+            send_command("muteon")
         MUTE_STATE = not MUTE_STATE  # Toggle the state
 
-
+# Clean up when exiting
+pi.wave_clear()
+pi.stop()
 sys.exit(0)
