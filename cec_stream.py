@@ -13,7 +13,8 @@ VOL_DN = "key pressed: volume down (42)"
 MUTE = "key released: mute (43)"
 READY = "audio status '7f'"  # message sent by cec-client to TV at end of handshaking
 
-VOL_STEPS = 4
+VOL_STEPS = 1
+POWER_ON_DELAY = 5  # Delay in seconds after power on before sending commands
 
 PIN = 4  # CPU GPIO number (not physical IO header pin number)
 
@@ -133,6 +134,7 @@ while p.poll() is None:
         
         # Turn amp on for 'on' state or transition to on
         if final_state == "on" or final_state == "in transition from standby to on":
+            time.sleep(POWER_ON_DELAY)  # Wait before sending power on command
             send_command("ampon", repeat=4)
             MUTE_STATE = False  # Amp always turns on unmuted
             p.stdin.write(
@@ -150,6 +152,7 @@ while p.poll() is None:
         if "from 'on' to 'standby'" in l:
             send_command("ampoff", repeat=4)
         elif "from 'standby' to 'on'" in l:
+            time.sleep(POWER_ON_DELAY)  # Wait before sending power on command
             send_command("ampon", repeat=4)
             MUTE_STATE = False  # Amp always turns on unmuted
             p.stdin.write(
