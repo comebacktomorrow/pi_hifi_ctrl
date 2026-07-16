@@ -1,0 +1,14 @@
+[Unit]
+Description=HDMI-CEC to Cambridge Audio amplifier control bridge
+After=pigpiod.service
+Wants=pigpiod.service
+
+[Service]
+ExecStart=@@EXEC@@
+User=@@USER@@
+WorkingDirectory=@@REPO_DIR@@
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

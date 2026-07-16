@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pi-hifi-ctrl"
+version = "0.1.0"
+description = "Control old Cambridge Audio Hi-Fi amplifiers from a Raspberry Pi via GPIO (RC5) and HDMI-CEC."
+readme = "README.md"
+requires-python = ">=3.7"
+dependencies = [
+    "pigpio",
+]
+
+[project.scripts]
+ca-amp-ctrl = "ca_amp_ctrl:main"
+pi-hifi-web = "web:main"
+
+# cec_stream.py has no main() entry point (it's a standalone top-level script,
+# not a libamp-based module), so it's run directly with the venv's python3
+# rather than via a console-script shim - see systemd/cec-stream.service.
+
+[tool.setuptools]
+py-modules = ["libamp", "ca_amp_ctrl", "cec_stream", "web"]

@@ -14,10 +14,21 @@ class Server(BaseHTTPRequestHandler):
     def do_GET(self):
 
         qs = dict(parse_qsl(urlparse(self.path).query))
-        command = qs["cmd"]
-        repeat = 1
-        if "repeat" in qs:
-            repeat = qs["repeat"]
+        command = qs.get("cmd", "")
+
+        if command not in libamp.command_table[self.model]:
+            self.send_response(400)
+            self.end_headers()
+            self.wfile.write(bytes("Error: unknown command '{0}'".format(command), "utf-8"))
+            return
+
+        try:
+            repeat = libamp.posint(qs.get("repeat", 1))
+        except argparse.ArgumentTypeError as err:
+            self.send_response(400)
+            self.end_headers()
+            self.wfile.write(bytes("Error: {0}".format(err), "utf-8"))
+            return
 
         try:
             libamp.execute(self.pin, command, repeat, model=self.model)
@@ -39,12 +50,17 @@ def run(port, pin, model):
     httpd.serve_forever()
 
 
-parser = argparse.ArgumentParser(
-    description="Web server for Cambridge Audio amplifiers control"
-)
-parser.add_argument("--pin", nargs="?", default=4, type=int)
-parser.add_argument("--port", nargs="?", default=9696, type=int)
-parser.add_argument("--model", default="540A", choices=libamp.all_models)
-args = parser.parse_args()
+def main():
+    parser = argparse.ArgumentParser(
+        description="Web server for Cambridge Audio amplifiers control"
+    )
+    parser.add_argument("--pin", nargs="?", default=4, type=int)
+    parser.add_argument("--port", nargs="?", default=9696, type=int)
+    parser.add_argument("--model", default="540A", choices=libamp.all_models)
+    args = parser.parse_args()
 
-run(port=args.port, pin=args.pin, model=args.model)
+    run(port=args.port, pin=args.pin, model=args.model)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,8 @@
+[Unit]
+Description=Update pi_hifi_ctrl to the latest committed code
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=@@EXEC@@

@@ -5,6 +5,7 @@ Confirmed working with:
   Cambridge Audio azur 540A v2
 """
 
+import argparse
 import pigpio
 
 pi = pigpio.pi()
@@ -141,14 +142,32 @@ def posint(n):
         raise argparse.ArgumentTypeError(msg)
 
 
+# cache of already-created pigpio waves, keyed by (rc5 message, pin).
+# pigpiod is a long-lived daemon shared by all clients, and never frees waves
+# on its own, so without this cache a long-running process (cec_stream.py,
+# web.py) would create a new wave on every command and eventually exhaust
+# pigpiod's wave store.
+_wave_cache = {}
+
+
+def get_wave(rc5_msg: int, pin: int) -> int:
+    """Return a cached wave id for this RC5 message on this pin, creating it if needed."""
+    key = (rc5_msg, pin)
+    wid = _wave_cache.get(key)
+    if wid is None:
+        wid = wave_mnch(rc5_msg, pin)
+        _wave_cache[key] = wid
+    return wid
+
+
 def execute(pin: int, command: str, repeat: int, model: str = "504A"):
     """execute a given command"""
 
     # generate RC5 message (int)
     rc5_msg = build_rc5(command_table[model][command])
 
-    # generate digital manchester-encoded waveform
-    wid = wave_mnch(rc5_msg, pin)
+    # generate (or reuse a cached) digital manchester-encoded waveform
+    wid = get_wave(rc5_msg, pin)
 
     for i in range(repeat):
         cbs = pi.wave_send_once(wid)

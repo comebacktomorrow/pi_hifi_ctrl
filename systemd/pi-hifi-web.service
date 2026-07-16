@@ -1,0 +1,13 @@
+[Unit]
+Description=Web control server for Cambridge Audio amplifier
+After=pigpiod.service network.target
+Wants=pigpiod.service
+
+[Service]
+ExecStart=@@EXEC@@
+User=@@USER@@
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

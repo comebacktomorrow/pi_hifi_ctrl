@@ -9,11 +9,52 @@ This project aims to breathe new life into old Hi-Fi amplifiers/receivers, by ad
 
 If you have another Cambridge Audio amplifier, please contact me, I'll do my best to find the relevant documentation and add support for it.
 
-## Dependencies:
+## Installation:
 
-* **Python 3** (apt-get install python3)
-* **pigpio library**, with *pigpiod* running (see https://github.com/joan2937/pigpio/ or http://abyz.co.uk/rpi/pigpio/).
-* **cec-utils** (apt-get install cec-utils) if **/usr/bin/cec-client** is not already installed.
+1. Clone this repo onto the Pi (anywhere you like, e.g. your home directory):
+
+       git clone https://github.com/andrew-bolin/pi_hifi_ctrl.git
+       cd pi_hifi_ctrl
+
+2. Run the installer as root:
+
+       sudo ./install.sh
+
+   [`install.sh`](install.sh) self-discovers the user to run the services as (whoever invoked `sudo`, via
+   `$SUDO_USER`) and the install location (wherever you cloned the repo), then:
+   * installs system dependencies (`pigpio` for the `pigpiod` daemon/service, `cec-utils` for `cec-client`) and
+     enables `pigpiod`
+   * adds that user to the `gpio` group
+   * adds `hdmi_ignore_cec_init=1` to `config.txt` (if not already present) so the Pi's own firmware CEC
+     init handshake doesn't fight with `cec-stream.service` — this needs a reboot to take effect
+   * creates a Python virtual environment in the repo directory and `pip install`s this package (declared in
+     [`pyproject.toml`](pyproject.toml), depends on `pigpio`) into it — a venv is required on modern Raspberry Pi OS
+     (Bookworm+), which blocks `pip install` into the system Python
+   * installs and enables the `cec-stream` systemd service (see [`systemd/`](systemd/)); `pi-hifi-web` is installed
+     but left disabled since it has no authentication — enable it yourself if you want it:
+     `sudo systemctl enable --now pi-hifi-web.service`
+   * installs (but leaves disabled) a `pi-hifi-ctrl-update.timer` — see [Staying up to date](#staying-up-to-date)
+
+   This installs two console commands into the venv: `ca-amp-ctrl` and `pi-hifi-web`. `cec_stream.py` has no
+   console command — it's run directly with the venv's `python3` by `cec-stream.service`, since (unlike the other
+   two scripts) it's a self-contained script rather than a `libamp`-based module.
+   Check status/logs with `systemctl status cec-stream.service` and `journalctl -u cec-stream.service -f`.
+
+## Staying up to date:
+
+To pick up new commits later, either run it manually whenever you like:
+
+    sudo ./update.sh
+
+or enable the timer installed by `install.sh` to check for and apply updates automatically once a day:
+
+    sudo systemctl enable --now pi-hifi-ctrl-update.timer
+
+Either way, [`update.sh`](update.sh) fast-forwards the repo to the latest commit on its tracked branch (it
+deliberately refuses to update if the checkout has diverged/local changes, rather than discarding anything),
+reinstalls the pip package into the existing venv, and restarts whichever of `cec-stream`/`pi-hifi-web` are
+currently enabled. It does not redo the one-time system setup (apt packages, `gpio` group, `config.txt`) — re-run
+`./install.sh` if you need that repeated.
 
 ## Wiring:
 * Pick an unused GPIO pin on your Pi (the default is GPIO 4). 
@@ -55,9 +96,12 @@ CXA60 may also be compatible with CXA81.
 `cec_stream.py` is used to receive commands from a TV via HDMI and forward them on to the amplifier.
 The amplifier will turn on & off when the TV does, and will respond to the TV's volume & mute buttons.
 
-Copy `cec_stream.py` into `/home/pi/cec/` and `startup_cec` into `/etc/init.d/`, then run:
-
-    sudo update-rc.d startup_cec defaults
-
-It will then start/stop when you boot/shutdown.
+Run it directly (`./cec_stream.py`, or `<venv>/bin/python3 cec_stream.py` if installed via [Installation](#installation)),
+or see [Installation](#installation) for running it automatically at boot via systemd.
 Plug an HDMI cable from your pi into the TV, preferably via the "ARC" HDMI port.
+
+## web.py Usage:
+
+`web.py` (installed as `pi-hifi-web`) runs a small HTTP server so the amplifier can be controlled from any device on
+your network, e.g. `GET http://<pi>:9696/?cmd=vol%2B&repeat=3`. It accepts the same `--pin`/`--model` options as
+`ca_amp_ctrl.py`, plus `--port` (default `9696`). It has no authentication, so only expose it on a trusted network.
