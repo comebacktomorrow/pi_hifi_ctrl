@@ -22,8 +22,11 @@ If you have another Cambridge Audio amplifier, please contact me, I'll do my bes
 
    [`install.sh`](install.sh) self-discovers the user to run the services as (whoever invoked `sudo`, via
    `$SUDO_USER`) and the install location (wherever you cloned the repo), then:
-   * installs system dependencies (`pigpio` for the `pigpiod` daemon/service, `cec-utils` for `cec-client`) and
-     enables `pigpiod`
+   * installs `cec-utils` (for `cec-client`), `git`/`build-essential`, and `python3-venv`
+   * builds and installs `pigpiod` **from source** (github.com/joan2937/pigpio) and enables it as a systemd
+     service — as of Debian 13 (trixie)/Raspberry Pi OS, `pigpiod` is no longer packaged for apt (Debian only
+     ships the pigpio client libraries, since upstream pigpio doesn't support Debian's generic kernel); this only
+     works because the Pi runs the Raspberry Pi Foundation's own kernel, which still exposes `/dev/gpiomem`
    * adds that user to the `gpio` group
    * adds `hdmi_ignore_cec_init=1` to `config.txt` (if not already present) so the Pi's own firmware CEC
      init handshake doesn't fight with `cec-stream.service` — this needs a reboot to take effect

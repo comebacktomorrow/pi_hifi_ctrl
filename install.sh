@@ -29,7 +29,30 @@ echo "Installing pi_hifi_ctrl for user '$RUN_USER' from '$REPO_DIR'..."
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y pigpio cec-utils python3-venv
+apt-get install -y git build-essential cec-utils python3-venv
+
+# pigpiod (the pigpio daemon) is not packaged for Debian 13+ - Debian only ships
+# the client-side libraries, since upstream pigpio doesn't support Debian's
+# generic kernel. Build it from source instead; this only works because this
+# Pi runs the Raspberry Pi Foundation's own kernel (with /dev/gpiomem), not
+# Debian's generic one.
+if [ ! -x /usr/local/bin/pigpiod ]; then
+    echo "Building pigpiod from source (github.com/joan2937/pigpio)..."
+    PIGPIO_BUILD_DIR="$(mktemp -d)"
+    git clone --depth 1 https://github.com/joan2937/pigpio.git "$PIGPIO_BUILD_DIR"
+    # build only the daemon + its lib; skip 'make install's python setup.py step,
+    # which fails on Python >=3.12 (pigpio's setup.py needs the removed distutils)
+    make -C "$PIGPIO_BUILD_DIR" pigpiod
+    install -m 0755 -d /usr/local/lib
+    install -m 0755 "$PIGPIO_BUILD_DIR/libpigpio.so.1" /usr/local/lib/
+    ln -sf libpigpio.so.1 /usr/local/lib/libpigpio.so
+    install -m 0755 -d /usr/local/bin
+    install -m 0755 "$PIGPIO_BUILD_DIR/pigpiod" /usr/local/bin/pigpiod
+    ldconfig
+    rm -rf "$PIGPIO_BUILD_DIR"
+fi
+install -m 0644 "$REPO_DIR/systemd/pigpiod.service" /etc/systemd/system/pigpiod.service
+systemctl daemon-reload
 systemctl enable --now pigpiod
 
 # let the service user access GPIO without being root
