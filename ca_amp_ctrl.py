@@ -8,7 +8,7 @@ import libamp
 def main():
     # Build argument parser
     parser = argparse.ArgumentParser(description="Control Cambridge Audio amplifiers.")
-    parser.add_argument("--pin", nargs="?", default=4, type=int)
+    parser.add_argument("--pin", nargs="?", default=23, type=int)
     parser.add_argument("--repeat", nargs="?", default=1, type=libamp.posint)
     parser.add_argument("--model", default="540A", choices=libamp.all_models)
     parser.add_argument(

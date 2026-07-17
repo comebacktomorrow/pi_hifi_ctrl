@@ -22,7 +22,7 @@ READY = "audio status '7f'"  # message sent by cec-client to TV at end of handsh
 VOL_STEPS = 1
 POWER_ON_DELAY = 5  # Delay in seconds after power on before sending commands
 
-PIN = 4  # CPU GPIO number (not physical IO header pin number)
+PIN = 23  # CPU GPIO number (not physical IO header pin number)
 
 RC5_PER = 889  # half-bit period (microseconds)
 CA_RC5_SYS = 16

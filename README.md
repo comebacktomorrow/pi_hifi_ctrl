@@ -60,8 +60,8 @@ currently enabled. It does not redo the one-time system setup (apt packages, `gp
 `./install.sh` if you need that repeated.
 
 ## Wiring:
-* Pick an unused GPIO pin on your Pi (the default is GPIO 4). 
-* Connect your pin to the signal wire of an RCA cable, and a ground to the shield.
+* Pick an unused GPIO pin on your Pi (the default is GPIO 23, physical pin 16).
+* Connect your pin to the signal wire of an RCA cable, and a ground (e.g. physical pin 14) to the shield.
 * Plug the RCA cable in to the "Ctrl In" socket on your Cambridge Audio amplifier.
 
 ## ca\_amp\_ctrl.py Usage:
@@ -88,7 +88,7 @@ Commands differ between amplifier models, for the 540A/640A they are:
 The other optional arguments are:
 
 **-h** merely shows brief usage help (including a full list of available commands and amplifier models)  
-**--pin [GPIO number]** to specify the GPIO pin to transmit on (default: 4)  
+**--pin [GPIO number]** to specify the GPIO pin to transmit on (default: 23)  
 **--repeat [positive integer]** to repeat the command (e.g. vol+/vol- only move the volume a very small amount)  
 **--model [model number]** to select your amplifier model, available choices are: CXA60, 840A, or 540A.
 The default is 540A, which should also be compatible with the 640A. 

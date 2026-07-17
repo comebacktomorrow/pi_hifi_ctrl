@@ -54,7 +54,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Web server for Cambridge Audio amplifiers control"
     )
-    parser.add_argument("--pin", nargs="?", default=4, type=int)
+    parser.add_argument("--pin", nargs="?", default=23, type=int)
     parser.add_argument("--port", nargs="?", default=9696, type=int)
     parser.add_argument("--model", default="540A", choices=libamp.all_models)
     args = parser.parse_args()
